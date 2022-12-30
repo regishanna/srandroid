@@ -39,7 +39,7 @@ public class TrafficService extends Service {
         public void run() {
             while (!m_stop) {
                 try {
-                    m_socketTcp = new Socket("82.66.50.72", 1664);
+                    m_socketTcp = new Socket("plauderie.freeboxos.fr", 1664);
                     m_socketTcp.setSoTimeout(30000 /*ms*/);
                     DatagramSocket socketUdp = new DatagramSocket();
                     DgramOStream dgramOStream = new DgramOStream(500);
