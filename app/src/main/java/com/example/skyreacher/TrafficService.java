@@ -23,16 +23,31 @@ import java.net.Socket;
 
 public class TrafficService extends Service {
 
+    // etats du service de trafic
+    enum Status {
+        DISCONNECTED,
+        WAITING_FOR_SELF_LOCATION,
+        OPERATIONAL
+    }
+
     private static class TrafficThread extends Thread {
 
         boolean m_stop;
-        Socket m_socketTcp;
-        Location m_lastLocation;
+        private Socket m_socketTcp;
+        private Location m_lastLocation;
+
+        // etat de la connexion
+        private Status m_socketStatus;
+        private long m_lastGetActivityNbRx;         // nombre de receptions depuis la derniere lecture d'activite
+        private long m_lastGetActivityTimestampNs;  // timestamp en nano secondes de la derniere lecture d'activite
 
         TrafficThread() {
             m_stop = false;
             m_socketTcp = null;
             m_lastLocation = null;
+
+            m_socketStatus = Status.DISCONNECTED;
+            getActivity();  // pour resetter les stats d'activite
         }
 
         @Override
@@ -40,6 +55,7 @@ public class TrafficService extends Service {
             while (!m_stop) {
                 try {
                     m_socketTcp = new Socket("plauderie.freeboxos.fr", 1664);
+                    m_socketStatus = Status.WAITING_FOR_SELF_LOCATION;
                     m_socketTcp.setSoTimeout(30000 /*ms*/);
                     DatagramSocket socketUdp = new DatagramSocket();
                     DgramOStream dgramOStream = new DgramOStream(500);
@@ -54,18 +70,22 @@ public class TrafficService extends Service {
                         final byte[] dgram = dgramOStream.recv(m_socketTcp);
                         if (dgram != null) {
                             Log.i("Sky Reacher", dgram.length + "octets recus");
+                            m_lastGetActivityNbRx++;
                             DatagramPacket message = new DatagramPacket(dgram, dgram.length, adresseAppliNav, portAppliNav);
                             socketUdp.send(message);
                         }
                     }
 
                     m_socketTcp.close();
+                    m_socketStatus = Status.DISCONNECTED;
+
 
                 } catch (Exception e) {
                     e.printStackTrace();
                     try {
                         m_socketTcp.close();
                     } catch (Exception ex) {/* rien a faire */}
+                    m_socketStatus = Status.DISCONNECTED;
                     // en cas d'erreur, on temporise le re-essai
                     try {
                         Thread.sleep(5000 /*ms*/);
@@ -81,8 +101,8 @@ public class TrafficService extends Service {
             m_lastLocation = location;
 
             // calcul des valeurs a envoyer, cf la structure position_msg_t dans le code du serveur
-            int latitude = (int)(location.getLatitude() * 1000000.0);
-            int longitude = (int)(location.getLongitude() * 1000000.0);
+            int latitude = (int) (location.getLatitude() * 1000000.0);
+            int longitude = (int) (location.getLongitude() * 1000000.0);
 
             // serialisation des donnees
             byte[] message = new byte[8];
@@ -94,6 +114,7 @@ public class TrafficService extends Service {
             new Thread(() -> {
                 try {
                     DgramOStream.send(m_socketTcp, message);
+                    m_socketStatus = Status.OPERATIONAL;
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -101,22 +122,42 @@ public class TrafficService extends Service {
         }
 
         private int serializeInt(byte[] buffer, int position, int value) {
-            buffer[position] = (byte)((value >> 24) & 0xff);
-            buffer[position + 1] = (byte)((value >> 16) & 0xff);
-            buffer[position + 2] = (byte)((value >> 8) & 0xff);
-            buffer[position + 3] = (byte)(value & 0xff);
+            buffer[position] = (byte) ((value >> 24) & 0xff);
+            buffer[position + 1] = (byte) ((value >> 16) & 0xff);
+            buffer[position + 2] = (byte) ((value >> 8) & 0xff);
+            buffer[position + 3] = (byte) (value & 0xff);
             return (position + 4);
         }
+
+        // activite en nombre de positions recues par seconde
+        // depuis le dernier appel a cette fonction
+        public double getActivity() {
+            // temps ecoule depuis le dernier appel
+            long currentTimestampNs = System.nanoTime();
+            long deltaNs = currentTimestampNs - m_lastGetActivityTimestampNs;
+
+            // calcul de l'activite
+            double activity = ((double) m_lastGetActivityNbRx * 1000000000.0F) / (double) deltaNs;
+
+            // reset des stats
+            m_lastGetActivityTimestampNs = currentTimestampNs;
+            m_lastGetActivityNbRx = 0;
+
+            return activity;
+        }
+
+        public Status getSocketStatus() {
+            return m_socketStatus;
+        }
+
     }
 
-    private TrafficThread m_thread;
-    private static boolean m_isRunning;
+    private static TrafficThread m_thread = null;
+    private static boolean m_isRunning = false;
     private FusedLocationProviderClient m_fusedLocationClient;
     private final LocationCallback m_locationCallback;
 
     public TrafficService() {
-        m_isRunning = false;
-
         m_locationCallback = new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult locationResult) {
@@ -131,7 +172,6 @@ public class TrafficService extends Service {
                 }
             }
         };
-
     }
 
     @Override
@@ -181,7 +221,7 @@ public class TrafficService extends Service {
     }
 
     @Override
-    public void onDestroy () {
+    public void onDestroy() {
         // arret de la demande de localisation
         try {
             m_fusedLocationClient.removeLocationUpdates(m_locationCallback);
@@ -198,8 +238,8 @@ public class TrafficService extends Service {
     private void lancerLocalisation() {
         final long interval_ms = 60000;
         LocationRequest locationRequest = LocationRequest.create()
-                                                         .setInterval(interval_ms)
-                                                         .setFastestInterval(interval_ms);
+                .setInterval(interval_ms)
+                .setFastestInterval(interval_ms);
         try {
             m_fusedLocationClient.requestLocationUpdates(locationRequest,
                     m_locationCallback,
@@ -213,5 +253,18 @@ public class TrafficService extends Service {
         return m_isRunning;
     }
 
+    public static Status getStatus() {
+        Status status = Status.DISCONNECTED;
+        if (m_thread != null)
+            status = m_thread.getSocketStatus();
+        return status;
+    }
+
+    public static double getActivity() {
+        double activity = 0.0F;
+        if (m_thread != null)
+            activity = m_thread.getActivity();
+        return activity;
+    }
 
 }
