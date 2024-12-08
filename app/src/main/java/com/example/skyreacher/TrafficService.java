@@ -54,7 +54,7 @@ public class TrafficService extends Service {
         public void run() {
             while (!m_stop) {
                 try {
-                    m_socketTcp = new Socket("82.66.214.245", 1664);
+                    m_socketTcp = new Socket("regishanna.hd.free.fr", 1664);
                     m_socketStatus = Status.WAITING_FOR_SELF_LOCATION;
                     m_socketTcp.setSoTimeout(30000 /*ms*/);
                     DatagramSocket socketUdp = new DatagramSocket();
