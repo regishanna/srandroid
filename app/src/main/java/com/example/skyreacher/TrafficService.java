@@ -10,6 +10,8 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -23,8 +25,8 @@ import java.net.Socket;
 
 public class TrafficService extends Service {
 
-    // etats du service de trafic
-    enum Status {
+    // traffic service states
+    public enum Status {
         DISCONNECTED,
         WAITING_FOR_SELF_LOCATION,
         OPERATIONAL
@@ -36,10 +38,10 @@ public class TrafficService extends Service {
         private Socket m_socketTcp;
         private Location m_lastLocation;
 
-        // etat de la connexion
+        // connection status
         private Status m_socketStatus;
-        private long m_lastGetActivityNbRx;         // nombre de receptions depuis la derniere lecture d'activite
-        private long m_lastGetActivityTimestampNs;  // timestamp en nano secondes de la derniere lecture d'activite
+        private long m_lastGetActivityNbRx;         // number of receptions since the last activity reading
+        private long m_lastGetActivityTimestampNs;  // timestamp in nano seconds of last activity reading
 
         TrafficThread() {
             m_stop = false;
@@ -47,7 +49,7 @@ public class TrafficService extends Service {
             m_lastLocation = null;
 
             m_socketStatus = Status.DISCONNECTED;
-            getActivity();  // pour resetter les stats d'activite
+            getActivity();  // to reset activity stats
         }
 
         @Override
@@ -59,19 +61,19 @@ public class TrafficService extends Service {
                     m_socketTcp.setSoTimeout(30000 /*ms*/);
                     DatagramSocket socketUdp = new DatagramSocket();
                     DgramOStream dgramOStream = new DgramOStream(500);
-                    InetAddress adresseAppliNav = InetAddress.getByName("localhost");
-                    int portAppliNav = 4000;
+                    InetAddress navAppliAddress = InetAddress.getByName("localhost");
+                    int navAppliPort = 4000;
 
-                    // si une localisation existe deja, on l'envoi
+                    // if a location already exists, we send it
                     if (m_lastLocation != null)
                         sendLocation(m_lastLocation);
 
                     while (!m_stop) {
                         final byte[] dgram = dgramOStream.recv(m_socketTcp);
                         if (dgram != null) {
-                            Log.i("Sky Reacher", dgram.length + "octets recus");
+                            Log.i("SkyReacher", dgram.length + "bytes received");
                             m_lastGetActivityNbRx++;
-                            DatagramPacket message = new DatagramPacket(dgram, dgram.length, adresseAppliNav, portAppliNav);
+                            DatagramPacket message = new DatagramPacket(dgram, dgram.length, navAppliAddress, navAppliPort);
                             socketUdp.send(message);
                         }
                     }
@@ -84,9 +86,9 @@ public class TrafficService extends Service {
                     e.printStackTrace();
                     try {
                         m_socketTcp.close();
-                    } catch (Exception ex) {/* rien a faire */}
+                    } catch (Exception ex) {/* nothing to do */}
                     m_socketStatus = Status.DISCONNECTED;
-                    // en cas d'erreur, on temporise le re-essai
+                    // in the event of an error, we delay the retry
                     try {
                         Thread.sleep(5000 /*ms*/);
                     } catch (InterruptedException ex) {
@@ -97,20 +99,20 @@ public class TrafficService extends Service {
         }
 
         public void sendLocation(Location location) {
-            // on memorise la localisation pour pouvoir la renvoyer lors d'une nouvelle connexion
+            // we memorize the location to be able to send it again during a new connection
             m_lastLocation = location;
 
-            // calcul des valeurs a envoyer, cf la structure position_msg_t dans le code du serveur
+            // calculation of the values to send, in millionths of degrees
             int latitude = (int) (location.getLatitude() * 1000000.0);
             int longitude = (int) (location.getLongitude() * 1000000.0);
 
-            // serialisation des donnees
+            // data serialization
             byte[] message = new byte[8];
             int position = 0;
             position = serializeInt(message, position, latitude);
             serializeInt(message, position, longitude);
 
-            // envoi du message dans un thread dedie pour ne pas bloquer la main loop
+            // sending the message in a dedicated thread so as not to block the main loop
             new Thread(() -> {
                 try {
                     DgramOStream.send(m_socketTcp, message);
@@ -129,17 +131,17 @@ public class TrafficService extends Service {
             return (position + 4);
         }
 
-        // activite en nombre de positions recues par seconde
-        // depuis le dernier appel a cette fonction
+        // activity in number of positions received per second
+        // since the last call to this function
         public double getActivity() {
-            // temps ecoule depuis le dernier appel
+            // time elapsed since last call
             long currentTimestampNs = System.nanoTime();
             long deltaNs = currentTimestampNs - m_lastGetActivityTimestampNs;
 
-            // calcul de l'activite
+            // calculation of activity
             double activity = ((double) m_lastGetActivityNbRx * 1000000000.0F) / (double) deltaNs;
 
-            // reset des stats
+            // reset stats
             m_lastGetActivityTimestampNs = currentTimestampNs;
             m_lastGetActivityNbRx = 0;
 
@@ -160,13 +162,9 @@ public class TrafficService extends Service {
     public TrafficService() {
         m_locationCallback = new LocationCallback() {
             @Override
-            public void onLocationResult(LocationResult locationResult) {
-                if (locationResult == null) {
-                    Log.w("SkyReacherXXXXXXXX", "locationResult == null");
-                    return;
-                }
+            public void onLocationResult(@NonNull LocationResult locationResult) {
                 for (Location location : locationResult.getLocations()) {
-                    Log.i("SkyReacherXXXXXXXX", "nouvelle localisation : " +
+                    Log.i("SkyReacher", "new location : " +
                             "lat=" + location.getLatitude() + " long=" + location.getLongitude());
                     m_thread.sendLocation(location);
                 }
@@ -177,7 +175,7 @@ public class TrafficService extends Service {
     @Override
     public void onCreate() {
 
-        Log.i("SkyReacherXXXXXXXX", "TrafficService.onCreate");
+        Log.i("SkyReacher", "TrafficService.onCreate");
 
         Intent notificationIntent = new Intent(this, MainActivity.class);
         PendingIntent pendingIntent =
@@ -186,56 +184,56 @@ public class TrafficService extends Service {
 
         Notification notification =
                 new Notification.Builder(this, NotificationUtils.CHANNEL_DEFAULT_IMPORTANCE)
-                        .setContentTitle("Service en tache de fond")
+                        .setContentTitle("Service en tâche de fond")
                         .setContentText("Appuyer pour arrêter l'envoi des traffics proches")
                         .setSmallIcon(R.mipmap.ic_launcher)
                         .setContentIntent(pendingIntent)
                         .build();
 
-        // Notification ID cannot be 0.
+        // notification ID cannot be 0.
         startForeground(100, notification);
 
-        // lancement du thread reseau
+        // launch of traffic thread
         m_thread = new TrafficThread();
         m_thread.start();
 
         m_fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
-        // lancement differe de la demande de localisation pour laisser le temps de connecter le socket
+        // launch defers from the location request to allow time to connect the socket
         Handler handler = new Handler();
-        handler.postDelayed(() -> lancerLocalisation(), 1000 /*ms*/);
+        handler.postDelayed(this::launchLocation, 1000 /*ms*/);
 
         m_isRunning = true;
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // If we get killed, after returning from here, restart
+        // if we get killed, after returning from here, restart
         return START_STICKY;
     }
 
     @Override
     public IBinder onBind(Intent intent) {
-        // pas de binding propose
+        // no binding offered
         return null;
     }
 
     @Override
     public void onDestroy() {
-        // arret de la demande de localisation
+        // stop the location request
         try {
             m_fusedLocationClient.removeLocationUpdates(m_locationCallback);
         } catch (SecurityException e) {
             e.printStackTrace();
         }
 
-        // arret du thread dedie
+        // stop the dedicated thread
         m_thread.m_stop = true;
 
         m_isRunning = false;
     }
 
-    private void lancerLocalisation() {
+    private void launchLocation() {
         final long interval_ms = 60000;
         LocationRequest locationRequest = LocationRequest.create()
                 .setInterval(interval_ms)

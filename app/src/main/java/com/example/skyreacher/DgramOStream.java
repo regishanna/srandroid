@@ -39,8 +39,8 @@ public class DgramOStream {
     {
         OutputStream output_stream = sock.getOutputStream();
 
-        // envoi de l'entete
-        // => taille du buffer en big endian
+        // send the header
+        // => buffer size in big endian
         int buf_length = buf.length;
         byte[] header = new byte[] {
                 (byte)((buf_length >> 8) & 0xff),
@@ -48,7 +48,7 @@ public class DgramOStream {
         };
         output_stream.write(header);
 
-        // envoi du buffer
+        // send the buffer
         output_stream.write(buf);
     }
 
@@ -60,34 +60,34 @@ public class DgramOStream {
         {
             InputStream input_stream = sock.getInputStream();
 
-            // doit-on recevoir le header ou le buffer ?
+            // should we receive the header or the buffer?
             if (m_rx_header_cur_len < m_rx_header.length)
             {
-                // on n'a pas totalement recu le header, on continue
+                // we have not completely received the header, we continue
                 int len = input_stream.read(m_rx_header, m_rx_header_cur_len, m_rx_header.length - m_rx_header_cur_len);
                 if (len < 0)
-                    throw new Exception("Socket ferme");
+                    throw new Exception("Closed socket");
                 m_rx_header_cur_len += len;
 
                 if (m_rx_header_cur_len == m_rx_header.length)
                 {
-                    // fin de reception du header, on verifie que la taille du buffer est compatible
+                    // end of reception of the header, we check that the size of the buffer is compatible
                     m_dgram_len = (m_rx_header[0] << 8) + m_rx_header[1];
                     if (m_dgram_len > m_rx_buf_max_len)
-                        throw new Exception("Buffer de reception trop petit");
+                        throw new Exception("Receive buffer too small");
                 }
             }
             else
             {
-                // on a deja recu le header, on recoit le buffer (ou on continue de le recevoir)
+                // we have already received the header, we receive the buffer (or we continue to receive it)
                 int len = input_stream.read(m_rx_buf, m_rx_buf_cur_len, m_dgram_len - m_rx_buf_cur_len);
                 if (len < 0)
-                    throw new Exception("Socket ferme");
+                    throw new Exception("Closed socket");
                 m_rx_buf_cur_len += len;
 
                 if (m_rx_buf_cur_len == m_dgram_len)
                 {
-                    // fin de reception du datagram
+                    // end of datagram reception
                     returned_dgram = Arrays.copyOfRange(m_rx_buf, 0, m_dgram_len);
                     clear_rx_buf();
                 }
@@ -95,9 +95,9 @@ public class DgramOStream {
         }
         catch (IOException e)
         {
-            // en cas d'erreur, on re-initialise les pointeurs du buffer de reception
+            // in the event of an error, we re-initialize the pointers of the reception buffer
             clear_rx_buf();
-            throw new Exception("Erreur de reception");
+            throw new Exception("Receive error");
         }
 
         return returned_dgram;

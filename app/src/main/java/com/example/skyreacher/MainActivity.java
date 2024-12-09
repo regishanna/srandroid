@@ -17,22 +17,21 @@ import static android.graphics.Color.argb;
 
 public class MainActivity extends AppCompatActivity {
 
-    private NotificationUtils m_notificationUtils;
     private Handler m_handler;
 
     Runnable m_updateActivity = new Runnable() {
         @Override
         public void run() {
-            // on recupere l'activite depuis le service
+            // we retrieve the activity from the service
             TrafficService.Status status = TrafficService.getStatus();
             double activity = TrafficService.getActivity();
-            Log.i("SkyReacherXXXXXXXX", "status=" + status + " activity=" + activity);
+            Log.i("SkyReacher", "status=" + status + " activity=" + activity);
             if (status != TrafficService.Status.OPERATIONAL)
                 activity = 0.0F;
 
             ProgressBar progressBar = findViewById((R.id.progressBar));
 
-            // affichage de l'activite
+            // activity display
             int maxActivity = 10;
             int maxProgress = progressBar.getMax();
             int displayedActivity = (int) (activity * maxProgress / maxActivity);
@@ -40,7 +39,7 @@ public class MainActivity extends AppCompatActivity {
                 displayedActivity = maxProgress;
             progressBar.setProgress(displayedActivity);
 
-            // affichage de la connectivite
+            // connectivity display
             int alpha = 0x40;
             int connectivityColor;
             if (status == TrafficService.Status.OPERATIONAL)
@@ -51,7 +50,7 @@ public class MainActivity extends AppCompatActivity {
                 connectivityColor = argb(alpha, 0xff, 0x0, 0x0);    // rouge
             progressBar.setBackgroundColor(connectivityColor);
 
-            // on relance la mise a jour de l'activite
+            // we restart the activity update
             m_handler.postDelayed(m_updateActivity, 1000 /*ms*/);
         }
     };
@@ -61,21 +60,22 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Log.i("SkyReacherXXXXXXXX", "MainActivity.onCreate");
+        Log.i("SkyReacher", "MainActivity.onCreate");
 
-        // creation des attributs
-        m_notificationUtils = new NotificationUtils(this);
+        // creation of attributes
         m_handler = new Handler();
 
-        // verification et demande des permissions
-        String[] permissionsDemandees = {Manifest.permission.ACCESS_COARSE_LOCATION,
+        // creation of notification channels
+        new NotificationUtils(this);
+
+        // checking and requesting permissions
+        String[] requestedPermissions = {Manifest.permission.ACCESS_COARSE_LOCATION,
                                          Manifest.permission.ACCESS_BACKGROUND_LOCATION};
-        for (String permission : permissionsDemandees)
+        for (String permission : requestedPermissions)
         {
             if (ContextCompat.checkSelfPermission(
                     this, permission) !=
                     PackageManager.PERMISSION_GRANTED) {
-                // You can directly ask for the permission.
                 ActivityCompat.requestPermissions(this,
                         new String[] { permission },
                         0);
@@ -87,11 +87,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
-        Log.i("SkyReacherXXXXXXXX", "MainActivity.onResume");
+        Log.i("SkyReacher", "MainActivity.onResume");
 
         ToggleButton toggle = findViewById(R.id.toggleButton);
 
-        // place l'etat du bouton dans l'etat du service
+        // sets the button state to the service state
         toggle.setChecked(TrafficService.isRunning());
 
         toggle.setOnCheckedChangeListener((buttonView, isChecked) -> {
@@ -103,7 +103,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // on met a jour la barre d'activite
+        // we update the activity bar
         m_handler.post(m_updateActivity);
     }
 
@@ -111,9 +111,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
 
-        Log.i("SkyReacherXXXXXXXX", "MainActivity.onPause");
+        Log.i("SkyReacher", "MainActivity.onPause");
 
-        // on arrete la mise a jour de la barre d'activite
+        // we stop updating the activity bar
         m_handler.removeCallbacks(m_updateActivity);
     }
 

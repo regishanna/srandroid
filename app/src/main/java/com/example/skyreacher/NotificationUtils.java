@@ -7,7 +7,7 @@ import android.content.Context;
 public class NotificationUtils {
 
     public static final String CHANNEL_DEFAULT_IMPORTANCE = "CHANNEL_DEFAULT_IMPORTANCE";
-    private static final String CHANNEL_DEFAULT_IMPORTANCE_NAME = "Canal par defaut";
+    private static final String CHANNEL_DEFAULT_IMPORTANCE_NAME = "Default channel";
 
     private final Context m_context;
 
